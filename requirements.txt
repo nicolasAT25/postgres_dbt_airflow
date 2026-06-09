@@ -1,0 +1,10 @@
+kafka-python
+apache-airflow
+boto3
+snowflake-connector-python
+dbt-core
+dbt-snowflake
+dbt-postgres
+psycopg-binary
+requests
+python-dotenv

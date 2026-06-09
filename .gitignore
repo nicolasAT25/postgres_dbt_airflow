@@ -3,6 +3,13 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# Airflow and dbt logs
+logs
+
+# Other files
+*.docx
+guia.docx
+
 # C extensions
 *.so
 
