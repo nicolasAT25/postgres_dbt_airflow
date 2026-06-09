@@ -1,0 +1,10 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Raw data for stock quotes in PostgreSQL
+    database: "{{ env_var('DBT_SOURCE_DB', 'etl_airflow_dbt') }}"
+    schema: raw
+
+    tables:
+      - name: stock_quotes_raw

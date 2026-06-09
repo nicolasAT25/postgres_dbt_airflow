@@ -48,22 +48,16 @@ services:
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
     command: server /data --console-address ":9001"
 
-######################
-  floci:
-    image: floci/floci:latest
-    ports:
-      - "4566:4566"
-    volumes:
-      - ./data:/app/data
-######################
-
   airflow-webserver:
-    image: apache/airflow:2.9.3
+    build: .
+    image: airflow-dbt:2.9.3
     container_name: airflow-webserver
     restart: always
     depends_on:
       - airflow-scheduler
       - postgres
+    env_file:
+      - .env
     environment:
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DB}
@@ -71,16 +65,22 @@ services:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
+      - ../dbt_stocks/dbt_stocks:/opt/dbt/dbt_stocks   # dbt project
+      - ./dbt_profiles:/opt/dbt/profiles               # Docker-aware profiles.yml
+      - ./.env:/opt/airflow/.env                       # environment variables
     ports:
       - "8080:8080"
     command: webserver
 
   airflow-scheduler:
-    image: apache/airflow:2.9.3
+    build: .
+    image: airflow-dbt:2.9.3
     container_name: airflow-scheduler
     restart: always
     depends_on:
       - postgres
+    env_file:
+      - .env
     environment:
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DB}
@@ -88,6 +88,9 @@ services:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
+      - ../dbt_stocks/dbt_stocks:/opt/dbt/dbt_stocks   # dbt project
+      - ./dbt_profiles:/opt/dbt/profiles               # Docker-aware profiles.yml
+      - ./.env:/opt/airflow/.env                       # environment variables
     command: scheduler
 
   postgres:

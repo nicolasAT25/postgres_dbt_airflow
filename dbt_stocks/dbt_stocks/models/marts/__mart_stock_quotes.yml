@@ -1,0 +1,38 @@
+version: 2
+
+models:
+  - name: mart_general_kpis
+    description: "Mart stock quotes table"
+    columns:
+      - name: stock_quote_id
+        description: "The stock quote ID"
+        data_tests:
+          - unique
+          - not_null
+      - name: company_symbol
+        description: "{{ doc('company_symbol') }}"
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["AAPL", "MSFT", "TSLA", "GOOGL", "AMZN"]
+      - name: current_price
+        description: "Current price for the stock"
+      - name: previous_close_price
+      - name: change
+      - name: percent_change
+      - name: fetched_at
+
+  - name: mart_candlestick
+    columns:
+      - name: company_symbol
+        description: "{{ doc('company_symbol') }}"
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["AAPL", "MSFT", "TSLA", "GOOGL", "AMZN"]
+      - name: candle_time
+      - name: candle_low
+      - name: candle_high
+      - name: candle_open
+      - name: candle_close
+      - name: trend_line

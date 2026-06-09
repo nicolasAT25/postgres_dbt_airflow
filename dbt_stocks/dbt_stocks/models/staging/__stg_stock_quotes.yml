@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: stg_stock_quotes
+    description: "Staging stock quotes table"
+    columns:
+      - name: stock_quote_id
+        description: "The stock quote ID"
+        data_tests:
+          - unique
+          - not_null
+      - name: company_symbol
+        description: "{{ doc('company_symbol') }}"
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["AAPL", "MSFT", "TSLA", "GOOGL", "AMZN"]
+      - name: current_price
+        description: "Current price for the stock"
+      - name: open_price_of_day
+      - name: high_price_of_day
+      - name: low_price_of_day
+      - name: previous_close_price
+      - name: change
+      - name: percent_change
+      - name: market_timestamp
+      - name: fetched_at

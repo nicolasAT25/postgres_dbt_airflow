@@ -6,9 +6,10 @@ import psycopg2       #Psycopg 2.
 from airflow import DAG
 #from airflow.providers.standard.operators.python import PythonOperator
 from airflow.operators.python import PythonOperator
+from airflow.operators.bash import BashOperator
 from datetime import datetime, timedelta
 
-load_dotenv()
+load_dotenv("/opt/airflow/.env")
 
 MINIO_ENDPOINT = "http://minio:9000"
 MINIO_ROOT_USER = os.getenv("MINIO_ROOT_USER")
@@ -27,13 +28,13 @@ PG_CONFIGS = {
         "table": os.getenv("PG_TABLE"),
     },
     "local": {
-        "host": "host.docker.internal",  # or 172.17.0.1 on Linux
-        "port": "5432",
-        "dbname": "etl_airflow_dbt",
-        "user": "postgres",
-        "password": "nicopostgres",
-        "schema": "staging",
-        "table": "stock_quotes_raw",
+        "host": os.getenv("PG_HOST_LOCAL"),
+        "port": os.getenv("PG_PORT_LOCAL"),
+        "dbname": os.getenv("PG_DB_LOCAL"),
+        "user": os.getenv("PG_USER_LOCAL"),
+        "password": os.getenv("PG_PASSWORD_LOCAL"),
+        "schema": os.getenv("PG_SCHEMA_LOCAL"),
+        "table": os.getenv("PG_TABLE_LOCAL"),
     },
 }
 
@@ -77,7 +78,7 @@ def load_to_postgres(target: str, **kwargs):
 
     cur.execute(f"""
                 
-    CREATE SCHEMA IF NOT EXISTS staging;
+    CREATE SCHEMA IF NOT EXISTS {schema};
                 
     CREATE TABLE IF NOT EXISTS {schema}.{table} (
         id          BIGSERIAL PRIMARY KEY,
@@ -131,8 +132,8 @@ default_args = {
 with DAG(
     "minio_to_postgres",
     default_args=default_args,
-    #schedule="*/1 * * * *",  # every 1 minutes
-    schedule="0 0 * * *",  # every day at 00:00 hrs
+    schedule="*/1 * * * *",  # every 1 minutes
+    #schedule="0 0 * * *",  # every day at 00:00 hrs
     #schedule="@once",
     catchup=False,
 ) as dag:
@@ -156,4 +157,77 @@ with DAG(
         #provide_context=True,
     )
 
-    task1 >> [task2 , task3]
+    # ── dbt: run all models after both loads complete ─────────
+    DBT_PROJECT_DIR  = "/opt/dbt/dbt_stocks"
+    DBT_PROFILES_DIR = "/opt/dbt/profiles"
+    DBT_BIN          = "/home/airflow/.local/bin/dbt"
+
+    # Shared env vars needed by both profiles
+    DBT_BASE_ENV = {
+        # local postgres
+        "PG_HOST_LOCAL":     os.getenv("PG_HOST_LOCAL", "host.docker.internal"),
+        "PG_PORT_LOCAL":     os.getenv("PG_PORT_LOCAL", "5432"),
+        "PG_DB_LOCAL":       os.getenv("PG_DB_LOCAL", "etl_airflow_dbt"),
+        "PG_USER_LOCAL":     os.getenv("PG_USER_LOCAL", "postgres"),
+        "PG_PASSWORD_LOCAL": os.getenv("PG_PASSWORD_LOCAL", ""),
+        "PG_SCHEMA_LOCAL":   os.getenv("PG_SCHEMA_LOCAL", "raw"),
+        # docker postgres
+        "PG_HOST":           os.getenv("PG_HOST", "postgres"),
+        "PG_PORT":           os.getenv("PG_PORT", "5432"),
+        "PG_DB":             os.getenv("PG_DB", "airflow"),
+        "PG_USER":           os.getenv("PG_USER", "airflow"),
+        "PG_PASSWORD":       os.getenv("PG_PASSWORD", "airflow"),
+        "PG_SCHEMA":         os.getenv("PG_SCHEMA", "raw"),
+        # dbt macro
+        "DBT_ENV_NAME":      "dev",
+    }
+
+    # ── Local Postgres dbt tasks ──────────────────────────────
+    task4 = BashOperator(
+        task_id="dbt_run_local",
+        bash_command=(
+            f"{DBT_BIN} run "
+            f"--project-dir {DBT_PROJECT_DIR} "
+            f"--profiles-dir {DBT_PROFILES_DIR} "
+            f"--target dev"
+        ),
+        env={**DBT_BASE_ENV, "DBT_SOURCE_DB": os.getenv("PG_DB_LOCAL", "etl_airflow_dbt")},
+    )
+
+    task5 = BashOperator(
+        task_id="dbt_test_local",
+        bash_command=(
+            f"{DBT_BIN} test "
+            f"--project-dir {DBT_PROJECT_DIR} "
+            f"--profiles-dir {DBT_PROFILES_DIR} "
+            f"--target dev"
+        ),
+        env={**DBT_BASE_ENV, "DBT_SOURCE_DB": os.getenv("PG_DB_LOCAL", "etl_airflow_dbt")},
+    )
+
+    # ── Docker Postgres dbt tasks ─────────────────────────────
+    task6 = BashOperator(
+        task_id="dbt_run_docker",
+        bash_command=(
+            f"{DBT_BIN} run "
+            f"--project-dir {DBT_PROJECT_DIR} "
+            f"--profiles-dir {DBT_PROFILES_DIR} "
+            f"--target docker"
+        ),
+        env={**DBT_BASE_ENV, "DBT_SOURCE_DB": os.getenv("PG_DB", "airflow")},
+    )
+
+    task7 = BashOperator(
+        task_id="dbt_test_docker",
+        bash_command=(
+            f"{DBT_BIN} test "
+            f"--project-dir {DBT_PROJECT_DIR} "
+            f"--profiles-dir {DBT_PROFILES_DIR} "
+            f"--target docker"
+        ),
+        env={**DBT_BASE_ENV, "DBT_SOURCE_DB": os.getenv("PG_DB", "airflow")},
+    )
+
+    task1 >> [task2, task3]
+    [task2, task3] >> task4 >> task5
+    [task2, task3] >> task6 >> task7
